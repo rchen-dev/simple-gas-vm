@@ -24,6 +24,7 @@ for gas_left() > 16 {
 - Construct a VM with `gasvm.New(gasvm.Config{...})`. Register constants as `map[string]gasvm.Value` and helpers as `map[string]gasvm.HostFunc`. Set `Config.Caller` to the entity running the script. Host callbacks can access it through `call.VM.Caller()`.
 - Compile source with `vm.Compile(source)`. Save a program with `program.MarshalBinary()` and load it with `gasvm.Load(data)`. Bytecode includes a format version, embedded constant values, and the names and signatures of the host calls it uses. A compatible VM can use different callers, callback implementations, and gas costs with the same program.
 - Execute with `vm.Run(ctx, program, "", budget)`. Pass an entry name and typed arguments to invoke a named entry. `Result` reports both the return value and gas spent, including gas spent before an error.
+- Cancel the context or set a deadline to stop a run between instructions. Host callbacks can stop their own work by observing `CallContext.Context`.
 - Share a compiled program across VM instances. Concurrent runs have independent locals, stacks, and budgets. Synchronize shared state in host callbacks as needed.
 
 ## Script language

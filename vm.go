@@ -167,11 +167,16 @@ type runDepthKey struct{}
 
 // Run executes the selected entry point. The empty name selects the top-level
 // script. GasUsed includes only successful charges, even when the run fails.
+// Cancellation is checked before execution and between instructions. Host
+// callbacks must observe CallContext.Context to stop while they are running.
 // The host owns any external effects produced by its callbacks.
 func (vm *VM) Run(ctx context.Context, p *Program, entryName string, budget uint32, args ...Value) (Result, error) {
 	var result Result
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
 	}
 	depth, _ := ctx.Value(runDepthKey{}).(int)
 	if depth >= MaxRunDepth {
@@ -221,6 +226,9 @@ func (vm *VM) Run(ctx context.Context, p *Program, entryName string, budget uint
 	var lastGas uint32
 	free := 0
 	for pc := 0; ; {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		if result.GasUsed != lastGas {
 			lastGas, free = result.GasUsed, 0
 		}
@@ -272,6 +280,9 @@ func (vm *VM) Run(ctx context.Context, p *Program, entryName string, budget uint
 				if err != nil {
 					return result, fmt.Errorf("quoting %s: %w", p.hosts[ins.arg].name, err)
 				}
+			}
+			if err := ctx.Err(); err != nil {
+				return result, err
 			}
 			if !charge(extra) {
 				return result, ErrOutOfGas

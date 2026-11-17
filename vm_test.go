@@ -274,3 +274,48 @@ func TestHostReentryDepth(t *testing.T) {
 		t.Fatalf("ran %d calls, error = %v", calls, err)
 	}
 }
+
+func TestRunCancellation(t *testing.T) {
+	for _, tc := range []struct {
+		when          string
+		quotes, calls int
+		gas           uint32
+	}{
+		{"before run", 0, 0, 0},
+		{"during quote", 1, 0, 1},
+		{"during callback", 1, 1, 3},
+	} {
+		t.Run(tc.when, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tc.when == "before run" {
+				cancel()
+			}
+			var quotes, calls int
+			vm := newVM(t, Config{Functions: map[string]HostFunc{
+				"action": {
+					Quote: func(CallContext, []Value) (uint32, error) {
+						quotes++
+						if tc.when == "during quote" {
+							cancel()
+						}
+						return 2, nil
+					},
+					Run: func(CallContext, []Value) (Value, error) {
+						calls++
+						cancel()
+						return Value{}, nil
+					},
+				},
+			}})
+			program := compileScript(t, vm, "action()\naction()")
+			res, err := vm.Run(ctx, program, "", 10)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("got %v, want context.Canceled", err)
+			}
+			if quotes != tc.quotes || calls != tc.calls || res.GasUsed != tc.gas {
+				t.Fatalf("quotes = %d, calls = %d, gas = %d", quotes, calls, res.GasUsed)
+			}
+		})
+	}
+}
